@@ -13,9 +13,13 @@ let player, pipes, particles, frame, lastTime;
 bestEl.textContent = best;
 
 function reset() {
-  score = 0; scoreEl.textContent = score;
-  player = { x: 112, y: 340, radius: 22, velocity: 0, rotation: 0 };
-  pipes = []; particles = []; frame = 0;
+  score = 0;
+  scoreEl.textContent = score;
+  // Keep the plumber on the center line so the first pipe is easy to see.
+  player = { x: 112, y: H / 2, radius: 22, velocity: 0, rotation: 0 };
+  pipes = [];
+  particles = [];
+  frame = 0;
 }
 function start() { reset(); state = 'playing'; overlay.classList.add('hidden'); canvas.focus(); flap(); }
 function endGame() {
@@ -31,7 +35,11 @@ function flap() {
 }
 function addPipe() {
   const gap = Math.max(142, 190 - score * 2.4);
-  const top = 92 + Math.random() * (H - gap - 220);
+  // Keep every opening centered around the middle flight path, with only a
+  // small variation so the plumber clearly flies through the pipe openings.
+  const centerVariation = Math.min(48, 18 + score * 1.5);
+  const gapCenter = H / 2 + (Math.random() - .5) * 2 * centerVariation;
+  const top = Math.max(70, gapCenter - gap / 2);
   pipes.push({ x: W + 30, width: 72, top, bottom: top + gap, passed: false });
 }
 function hitPipe(p) {
@@ -41,9 +49,10 @@ function hitPipe(p) {
 }
 function update(dt) {
   frame++;
-  player.velocity += 1250 * dt; player.y += player.velocity * dt;
+  player.velocity += 1250 * dt;
+  player.y += player.velocity * dt;
   player.rotation = Math.min(Math.PI / 2, Math.max(-.55, player.velocity / 650));
-  if (frame % 92 === 0) addPipe();
+  if (frame % 110 === 0) addPipe();
   const speed = 190 + Math.min(score * 3, 100);
   pipes.forEach(p => {
     p.x -= speed * dt;
@@ -75,17 +84,13 @@ function drawWrench() {
 }
 function drawPlayer() {
   ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(player.rotation);
-  // Plumber body and blue overalls.
   ctx.fillStyle = '#1768a8'; roundedRect(-18, -1, 36, 27, 9); ctx.fill();
   ctx.fillStyle = '#f4b27b'; ctx.beginPath(); ctx.arc(0, -5, 15, 0, 7); ctx.fill();
-  // Orange safety helmet with brim.
   ctx.fillStyle = '#ff7a00'; ctx.beginPath(); ctx.arc(0, -16, 17, Math.PI, 0); ctx.fill();
   ctx.fillStyle = '#f59a20'; roundedRect(-21, -17, 42, 7, 4); ctx.fill();
-  // Face, beard and friendly expression.
   ctx.fillStyle = '#6e3d28'; ctx.beginPath(); ctx.arc(-1, 0, 12, 0, Math.PI); ctx.fill();
   ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(7, -6, 4, 0, 7); ctx.fill(); ctx.fillStyle = '#16324f'; ctx.beginPath(); ctx.arc(8, -6, 2, 0, 7); ctx.fill();
   ctx.strokeStyle = '#16324f'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(5, 1, 6, .1, 1.2); ctx.stroke();
-  // Tool belt and pipe wrench held out front.
   ctx.fillStyle = '#8b4d21'; ctx.fillRect(-19, 11, 38, 5); ctx.fillStyle = '#ffd15c'; ctx.fillRect(1, 11, 6, 6); drawWrench();
   ctx.restore();
 }
