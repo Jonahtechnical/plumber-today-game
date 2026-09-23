@@ -7,10 +7,7 @@ const startButton = document.getElementById('start-button');
 const scoreEl = document.getElementById('score');
 const bestEl = document.getElementById('best');
 
-const W = 480, H = 720;
-// Match the canvas drawing coordinate system to its displayed size.
-// Without these attributes, browsers default the canvas to 300x150 and
-// the flight path and pipe openings become distorted or clipped.
+const W = 480, H = 720, GROUND = 35;
 canvas.width = W;
 canvas.height = H;
 
@@ -28,10 +25,13 @@ function reset() {
 }
 function start() { reset(); state = 'playing'; overlay.classList.add('hidden'); canvas.focus(); flap(); }
 function endGame() {
+  if (state !== 'playing') return;
   state = 'gameover';
   if (score > best) { best = score; localStorage.setItem('pipeHopperBest', best); bestEl.textContent = best; }
-  title.textContent = 'Pipe blocked!'; copy.textContent = `You fixed ${score} pipe${score === 1 ? '' : 's'} today. Give it another go!`;
-  startButton.innerHTML = 'Try Again <span>↻</span>'; overlay.classList.remove('hidden');
+  title.textContent = 'Pipe blocked!';
+  copy.textContent = `You fixed ${score} pipe${score === 1 ? '' : 's'} today. Give it another go!`;
+  startButton.innerHTML = 'Try Again <span>↻</span>';
+  overlay.classList.remove('hidden');
 }
 function flap() {
   if (state !== 'playing') return;
@@ -39,42 +39,55 @@ function flap() {
   for (let i = 0; i < 5; i++) particles.push({ x: player.x - 20, y: player.y + 8, vx: -Math.random() * 60, vy: (Math.random() - .5) * 90, life: .5 });
 }
 function addPipe() {
-  const gap = Math.max(174, 220 - score * 2);
-  const gapCenter = H / 2 + (Math.random() - .5) * 50;
-  const top = Math.max(70, Math.min(H - 35 - gap - 70, gapCenter - gap / 2));
+  // The gap shrinks and its center moves farther from the middle as the score rises.
+  const gap = Math.max(138, 220 - score * 3);
+  const movement = Math.min(145, 35 + score * 5);
+  const gapCenter = H / 2 + (Math.random() - .5) * 2 * movement;
+  const top = Math.max(55, Math.min(H - GROUND - gap - 55, gapCenter - gap / 2));
   pipes.push({ x: W + 30, width: 72, top, bottom: top + gap, passed: false });
 }
 function hitPipe(p) {
-  const closestX = Math.max(p.x, Math.min(player.x, p.x + p.width));
-  const closestY = player.y < p.top ? p.top : player.y > p.bottom ? p.bottom : player.y;
-  return Math.hypot(player.x - closestX, player.y - closestY) < player.radius;
+  // Only collide while horizontally overlapping a pipe. Being inside the gap
+  // is safe; the previous circle/rectangle test treated the gap as a hit.
+  const overlapsHorizontally = player.x + player.radius > p.x && player.x - player.radius < p.x + p.width;
+  if (!overlapsHorizontally) return false;
+  const hitsTop = player.y - player.radius < p.top;
+  const hitsBottom = player.y + player.radius > p.bottom;
+  return hitsTop || hitsBottom;
 }
 function update(dt) {
   frame++;
   player.velocity += 1050 * dt;
   player.y += player.velocity * dt;
   player.rotation = Math.min(Math.PI / 2, Math.max(-.55, player.velocity / 650));
-  if (frame === 1 || frame % 125 === 0) addPipe();
-  const speed = 180 + Math.min(score * 3, 90);
+
+  // Pipes move continuously, with a shorter interval as the game gets harder.
+  const spawnInterval = Math.max(76, 125 - score * 2);
+  if (frame === 1 || frame % spawnInterval === 0) addPipe();
+
+  const speed = 180 + Math.min(score * 6, 180);
   pipes.forEach(p => {
     p.x -= speed * dt;
-    if (!p.passed && p.x + p.width < player.x) { p.passed = true; score++; scoreEl.textContent = score; }
+    if (!p.passed && p.x + p.width < player.x) {
+      p.passed = true;
+      score++;
+      scoreEl.textContent = score;
+    }
     if (hitPipe(p)) endGame();
   });
   pipes = pipes.filter(p => p.x + p.width > -20);
+
   particles.forEach(q => { q.x += q.vx * dt; q.y += q.vy * dt; q.life -= dt; });
   particles = particles.filter(q => q.life > 0);
-  if (player.y - player.radius < 0 || player.y + player.radius > H - 35) endGame();
+  if (player.y - player.radius < 0 || player.y + player.radius > H - GROUND) endGame();
 }
 function roundedRect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
 function drawBackground() {
   const sky = ctx.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, '#7edcff'); sky.addColorStop(1, '#c9f4ff'); ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = 'rgba(255,255,255,.58)';
   for (const c of [{x:60,y:120,s:1},{x:370,y:220,s:.75},{x:260,y:65,s:.55}]) { ctx.beginPath(); ctx.arc(c.x, c.y, 28*c.s, 0, 7); ctx.arc(c.x+25*c.s,c.y+3,20*c.s,0,7); ctx.arc(c.x-23*c.s,c.y+8,17*c.s,0,7); ctx.fill(); }
-  // A subtle center guide makes the plumber's route easy to follow.
-  ctx.save(); ctx.setLineDash([8, 12]); ctx.strokeStyle = 'rgba(9, 115, 155, .22)'; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke(); ctx.restore();
-  ctx.fillStyle = '#8cda83'; ctx.fillRect(0, H - 35, W, 35); ctx.fillStyle = '#65bd68'; ctx.fillRect(0, H - 35, W, 6);
+  ctx.save(); ctx.setLineDash([8, 12]); ctx.strokeStyle = 'rgba(9, 115, 155, .22)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke(); ctx.restore();
+  ctx.fillStyle = '#8cda83'; ctx.fillRect(0, H - GROUND, W, GROUND); ctx.fillStyle = '#65bd68'; ctx.fillRect(0, H - GROUND, W, 6);
 }
 function drawPipe(p, y, h, capAtTop) {
   ctx.fillStyle = '#0878a5'; roundedRect(p.x, y, p.width, h, 7); ctx.fill();
@@ -101,7 +114,7 @@ function drawPlayer() {
 }
 function draw() {
   ctx.clearRect(0, 0, W, H); drawBackground();
-  pipes.forEach(p => { drawPipe(p, 0, p.top, false); drawPipe(p, p.bottom, H - 35 - p.bottom, true); });
+  pipes.forEach(p => { drawPipe(p, 0, p.top, false); drawPipe(p, p.bottom, H - GROUND - p.bottom, true); });
   particles.forEach(q => { ctx.globalAlpha = Math.max(0, q.life * 2); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(q.x, q.y, 3, 0, 7); ctx.fill(); ctx.globalAlpha = 1; });
   drawPlayer();
 }
